@@ -44,7 +44,7 @@ local function setcellcolor(cell, color)
 end
 
 local function getcellchar(cell)
-	return cell:GetAttribute("charbyte")
+	return cell:GetAttribute("charbyte") or SPACEBYTE
 end
 
 local function getcellcolor(cell)
@@ -75,22 +75,6 @@ local function cleardisplay(display)
 	end
 end
 
-local function scrolldisplay(display, amount)
-	assert(amount >= 1)
-	for y = 1, DISPHEIGHT - 1 do
-		for x = 1, DISPWIDTH do
-			local newchar = getcellchar(display[y + amount][x])
-			local newcolor = getcellcolor(display[y + amount][x])
-			setcellchar(display[y][x], newchar)
-			setcellcolor(display[y][x], newcolor)
-		end
-	end
-	for x = 1, DISPWIDTH do
-		setcellchar(display[DISPHEIGHT][x], SPACEBYTE)
-		setcellcolor(display[DISPHEIGHT][x], DEFAULTFONTCOLOR)
-	end
-end
-
 local displayfolder
 do
     local termscreen = Instance.new("ScreenGui")
@@ -118,6 +102,24 @@ local directory = "/"
 local rootfs = bootdevice.parts[2] -- TODO
 local cmdhistory = {}
 
+local function scroll(amount)
+	assert(amount >= 1)
+	for y = 1, DISPHEIGHT do
+		for x = 1, DISPWIDTH do
+			local newchar, newcolor
+			if y + amount > DISPHEIGHT then
+				newchar = SPACEBYTE
+				newcolor = DEFAULTFONTCOLOR
+			else
+				newchar = getcellchar(display[y + amount][x])
+				newcolor = getcellcolor(display[y + amount][x])
+			end
+			setcellchar(display[y][x], newchar)
+			setcellcolor(display[y][x], newcolor)
+		end
+	end
+end
+
 local function clear()
 	cleardisplay(display)
 	cursory = 1
@@ -126,7 +128,7 @@ end
 
 local function newline()
 	if cursory == DISPHEIGHT then
-		scrolldisplay(display, 1)
+		scroll(1)
 	else
 		cursory = cursory + 1
 	end
@@ -173,16 +175,37 @@ local COLORCODES = {
 	["97"] = Color3.fromRGB(255, 255, 255), -- WHITE
 }
 
+local function wraptext(text)
+	local wrapped = ""
+	for i, line in ipairs(text:split("\n")) do
+		-- start at 0 for new line characters splits
+		for i = 0, #line, DISPWIDTH do
+			wrapped = wrapped .. line:sub(i, i + DISPWIDTH - 1) .. "\n"
+		end
+	end
+	return wrapped:sub(1, -2)
+end
+
 local function echo(text)
-	text = text:gsub("\t", "    ")
+	text = wraptext(text:gsub("\t", "    "))
 	local color = DEFAULTFONTCOLOR
 	local index = 1
+
+	-- TODO wrap text
+	local linecount = #text - #text:gsub("\n", "") + 1
+	if linecount > DISPHEIGHT then
+		local lines = text:split("\n")
+		lines = table.move(lines, linecount - DISPHEIGHT + 1, linecount, 1, {})
+		text = table.concat(lines, "\n")
+		linecount = DISPHEIGHT
+	end
+	if linecount + cursory > DISPHEIGHT then
+		local scrollby = cursory + linecount - DISPHEIGHT
+		scroll(scrollby)
+		cursory = math.max(1, cursory - scrollby)
+	end
 	
 	while index <= #text do
-		if cursorx > DISPWIDTH then
-			cursorx = 1
-			newline()
-		end
 		local putchar
 		if text:sub(index, index + 1) == "\\\\" then
 			-- put \
@@ -208,7 +231,8 @@ local function echo(text)
 		
 		if putchar ~= nil then
 			if putchar == "\n" then
-				newline()
+				cursory = cursory + 1
+				cursorx = 1
 			else
 				local cell = display[cursory][cursorx]
 				setcellcolor(cell, color)
@@ -613,7 +637,7 @@ local function readline(history)
 				end
 				text = text:sub(1, DISPWIDTH)
 				if cursory == DISPHEIGHT then
-					scrolldisplay(display, 1)
+					scroll(1)
 					cursory = cursory - 1
 				end
 				for i = 1, #text do

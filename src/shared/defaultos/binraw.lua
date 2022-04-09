@@ -106,13 +106,15 @@ return function(argv)
 	elseif type(file) == "string" then
 		echo(esc(dir) .. "\n")
 	else
+		local output = ""
 		for name, childfile in pairs(file) do
 			if type(childfile) == "table" then
-				echo("[36]" .. esc(name) .. "\n")
+				output = output .. "[36]" .. esc(name) .. "\n"
 			else
-				echo(esc(name) .. "\n")
+				output = output .. esc(name) .. "\n"
 			end
 		end
+		echo(output)
 	end
 end]],
 	cat = [[
