@@ -6,12 +6,16 @@ local StorageDevice = require(game.ReplicatedStorage.Common.storagedevice)
 
 local disks
 do
-	local disk1 = DiskDevice.new()
+	local disk1 = DiskDevice.new(0)
+
 	local bootpart = StorageDevice.empty()
+	bootpart.name = disk1.name .. "1"
 	bootpart.type = "boot"
     local bootprogram = require(game.ReplicatedStorage.Common.defaultos.boot)
 	bootpart.program = lbc:compile(bootprogram, "boot")
+
 	local rootpart = StorageDevice.empty()
+	rootpart.name = disk1.name .. "2"
     rootpart.type = "fs"
     rootpart.fs = {
 		etc = {hostname = "host"},
@@ -19,20 +23,26 @@ do
 		tmp = {},
 		root = {},
 		home = {},
-		--lib = {},
-		--dev = {},
-		--mnt = {},
+		lib = {},
+		dev = {},
+		mnt = {},
 	}
-	-- initialize /bin
+	-- initialize /bin and /lib
     local binraw = require(game.ReplicatedStorage.Common.defaultos.binraw)
     rootpart.fs.root.binraw = {}
     for name, file in pairs(binraw) do
         rootpart.fs.bin[name] = lbc:compile(file, name)
         rootpart.fs.root.binraw[name .. ".lua"] = file
     end
+	local libraw = require(game.ReplicatedStorage.Common.defaultos.libraw)
+	rootpart.fs.root.libraw = {}
+	for name, file in pairs(libraw) do
+		rootpart.fs.lib[name] = lbc:compile(file, name)
+        rootpart.fs.root.libraw[name .. ".lua"] = file
+	end
 	disk1.parts[1] = bootpart
 	disk1.parts[2] = rootpart
-	local disk2 = DiskDevice.new()
+	local disk2 = DiskDevice.new(1)
 	disks = {disk1, disk2}
 end
 
@@ -46,6 +56,14 @@ for _, disk in ipairs(disks) do
 end
 local bootdevice = bootoptions[1]
 assert(bootdevice ~= nil, "no bootable device found")
+
+local rootfs = bootdevice.parts[2]
+for _, disk in ipairs(disks) do
+	rootfs.fs.dev[disk.name] = disk.uuid
+	for _, part in ipairs(disk.parts) do
+		rootfs.fs.dev[part.name] = part.uuid
+	end
+end
 
 local namespaces = {
 	math = {math = math},

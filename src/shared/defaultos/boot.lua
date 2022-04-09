@@ -244,8 +244,22 @@ local function echo(text)
 	end
 end
 
+-- TODO
 local function esc(text)
-	return text
+	-- local escaped = ""
+	-- local index = 1
+	-- while index <= #text do
+	-- 	local char = text:sub(index, index)
+	-- 	if char == "\\" or char == "[" then
+	-- 		escaped = escaped .. "\\" .. char
+	-- 		index = index + 1
+	-- 	else
+	-- 		escaped = escaped .. char
+	-- 		index = index + 1
+	-- 	end
+	-- end
+	-- return escaped
+	return text:gsub("\\", "\\\\"):gsub("%[", "\\[")
 end
 
 local BYTEUNITS = {
@@ -287,8 +301,10 @@ local function parentchild(path)
 end
 
 local function parsedir(dir)
-	--if dir == "/" then return dir end
-	if dir:sub(1, 1) == "." then
+	if dir:sub(1, 2) == ".." then
+		local parent, child = parentchild(directory)
+		dir = parent .. dir:sub(4)
+	elseif dir:sub(1, 1) == "." then
 		dir = directory .. dir:sub(3)
 	end
 	if dir:sub(1, 1) == "/" then
@@ -367,6 +383,7 @@ local osnamespaces = {
 		echo = echo,
 		esc = esc,
 		clear = clear,
+		-- readline is defined below
 	},
 	filesys = {
 		parsedir = parsedir,
@@ -388,6 +405,14 @@ local function bcenv()
 	local env = {
 		print = print, -- debug
 	}
+
+	env.import = function(name)
+		local bc = rootfs:get("/lib/" .. name)
+		assert(type(bc) == "string", "module '" .. name .. "' does not exist")
+		-- TODO circular imports and modules importing themselves
+		local module = lbi:interpret(bc, bcenv())
+		env[name] = module
+	end
 	
 	env.use = function(name)
 		local namespace = osnamespaces[name]
@@ -693,6 +718,7 @@ local function readline(history)
 	
 	return cmd
 end
+osnamespaces.log.readline = readline
 
 game.StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
 

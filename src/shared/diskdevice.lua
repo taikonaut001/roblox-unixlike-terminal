@@ -1,14 +1,11 @@
-local namecounter = 0
-
 local DiskDevice = {}
 DiskDevice.__index = DiskDevice
 
-function DiskDevice.new()
+function DiskDevice.new(n)
 	local self = setmetatable({}, DiskDevice)
 	self.parts = {}
-	self.name = "sd" .. string.char(97 + namecounter)
-	namecounter = namecounter + 1
-	assert(namecounter <= 25)
+	self.name = "sd" .. string.char(97 + n)
+	self.uuid = game.HttpService:GenerateGUID(false)
 	
 	return self
 end

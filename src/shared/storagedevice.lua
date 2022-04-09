@@ -1,30 +1,9 @@
-local namecounter = 0
-
 local StorageDevice = {}
 StorageDevice.__index = StorageDevice
 
 function StorageDevice.empty()
 	local self = setmetatable({}, StorageDevice)
 	self.uuid = game.HttpService:GenerateGUID(false)
-	
-	return self
-end
-
-function StorageDevice.new()
-	local self = StorageDevice.empty()
-	self.type = "stfs"
-	self.fs = {
-		etc = {
-			hostname = "host",
-		},
-		bin = {},
-		tmp = {},
-		root = {},
-		home = {},
-		--lib = {},
-		--dev = {},
-		--mnt = {}, -- TODO
-	}
 	
 	return self
 end
