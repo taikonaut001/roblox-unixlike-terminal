@@ -107,7 +107,7 @@ return function(argv)
 			if type(childfile) == "table" then
 				output = output .. "[36]" .. esc(name) .. "\n"
 			else
-				output = output .. esc(name) .. "\n"
+				output = output .. "[0]" .. esc(name) .. "\n"
 			end
 		end
 		echo(output)
