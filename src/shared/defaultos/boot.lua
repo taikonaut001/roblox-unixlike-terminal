@@ -191,7 +191,6 @@ local function echo(text)
 	local color = DEFAULTFONTCOLOR
 	local index = 1
 
-	-- TODO wrap text
 	local linecount = #text - #text:gsub("\n", "") + 1
 	if linecount > DISPHEIGHT then
 		local lines = text:split("\n")
@@ -433,38 +432,31 @@ local function execute(argv, envoverride)
 		local firstchar = identifier:sub(1, 1)
 		if firstchar == "/" or firstchar == "." or firstchar == ".." or firstchar == "~" then
 			bcdir = parsedir(identifier)
-			local success, result = pcall(function()
-				return rootfs:get(bcdir)
-			end)
-			if not success or result == nil then
+			bc = rootfs:pathto(bcdir)
+			if not bc then
 				echo(identifier .. ": no such file or directory\n")
 				return
 			end
-			bc = result
 		else
 			bcdir = "/bin/" .. identifier
-			bc = rootfs:get(bcdir)
-			if bc == nil then
+			bc = rootfs:pathto(bcdir)
+			if not bc then
 				echo(identifier .. ": command not found\n")
 				return
 			end
 		end
 	end
-	
 	local success, result = pcall(function()
 		return lbi:interpret(bc, envoverride or bcenv())
 	end)
-	
 	if not success then
 		echo(bcdir .. ": error while executing lua bytecode\n[31]" .. result .. "\n")
 		return
 	end
-	
 	local cmdfunc = result
 	assert(type(cmdfunc) == "function")
 	local argvcopy = table.move(argv, 1, #argv, 1, {})
 	success, result = pcall(cmdfunc, argvcopy)
-	
 	if not success then
 		echo("lua error while executing command\n" .. "[31]" .. esc(result) .. "\n")
 	end
@@ -475,41 +467,30 @@ local function collectoutput(argv)
 	local olduse = env.use
 	local output = ""
 	
-	local pipenamespace = {}
-	pipenamespace.log = {
+	local pipenamespaces = {}
+	pipenamespaces.log = {
 		echo = function(text)
 			output = output .. text
 		end,
-		esc = esc,
+		-- esc = esc,
+		esc = function(s)return s end,
 		clear = function()end,
 	}
-	setmetatable(pipenamespace, {__index = osnamespace})
 	
 	env.use = function(name)
-		local namespace
-		if name == "log" then
-			namespace = {
-				--display = display, -- TODO
-				echo = function(text)
-					output = output .. text
-				end,
-				esc = esc,
-				clear = function()
-					-- TODO ??
-				end,
-			}
-		else
-			namespace = namespaces[name]
-				or error("namespace does not exist: " .. name)
-		end
+		local namespace = pipenamespaces[name]
+			or osnamespaces[name]
+			or namespaces[name]
+			or error("namespace '" .. name .. "' does not exist")
 		for k, v in pairs(namespace) do
 			env[k] = v
 		end
 	end
 	
 	execute(argv, env)
-	assert(output:sub(-1, -1) == "\n")
-	output = output:sub(1, -2)
+	if output:sub(-1, -1) == "\n" then
+		output = output:sub(1, -2)
+	end
 	return output
 end
 
@@ -528,19 +509,14 @@ local function runcmd(command)
 		local sender = table.move(argv, 1, redirection - 1, 1, {})
 		local receiver = table.move(argv, redirection + 1, #argv, 1, {})
 		local path = parsedir(receiver[1])
-		
-		local success, result = pcall(function()
-			rootfs:get(path)
-		end)
-		
-		if not success then
+		local sendto = rootfs:pathto(path)
+		if sendto == false then
 			echo(receiver[1] .. ": no such file or directory\n")
 			return
 		end
-		
 		local parent, child = parentchild(path)
 		local sent = collectoutput(sender)
-		
+
 		if argv[redirection] == ">" then
 			rootfs:get(parent)[child] = sent
 		elseif argv[redirection] == ">>" then
