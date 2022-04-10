@@ -1,5 +1,4 @@
 ## Todo
-- Separate terminal and boot programs
 - Add boot selector for multiple operating systems
 - Less spaghetti
 
