@@ -1,3 +1,5 @@
+--!VERSION=0.0
+--!DEPENDENCIES={}
 use("log")
 
 return function(argv)
