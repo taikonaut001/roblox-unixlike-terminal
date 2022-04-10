@@ -29,30 +29,4 @@ return function(grid)
 	end
     return table.concat(grid, "\n")
 end]],
-    getdevicefromuuid = [[
-use("disk")
-return function(uuid)
-    for _, disk in ipairs(disks) do
-        if disk.uuid == uuid then return disk end
-        for _, part in ipairs(parts) do
-            if part.uuid == uuid then return part end
-        end
-    end
-end]],
---     mountinfodecode = [[
--- use("lua")
--- use("table")
--- use("disks")
--- import("getdevicefromuuid")
--- return function(mounts)
---     local decode = {}
---     for _, line in ipairs(mounts:split("\n")) do
---         local a, b = table.unpack(line:split("    "))
---         decode[getdevicefromuuid(a)] = b
---     end
---     return decode
--- end]],
---     mountinfoencode = [[
--- return function()
--- end]]
 }
