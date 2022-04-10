@@ -6,7 +6,7 @@ use("disks")
 use("lua")
 use("string")
 use("table")
-import("formatcolumns")
+use("formatcolumns")
 return function(argv)
 	local items = {{"NAME", "SIZE", "TYPE", "MOUNTPOINT"}}
 	for _, disk in ipairs(disks) do
@@ -297,20 +297,20 @@ return function(argv)
 	for _, disk in ipairs(disks) do
 		for _, part in ipairs(disk.parts) do
 			if part.uuid == device then
-				if part.type ~= "fs" then
-					echo("mount: unable to mount device of type " .. part.type .. "\n")
-					return
-				end
+				-- if part.type ~= "fs" then
+				-- 	echo("mount: unable to mount device of type " .. part.type .. "\n")
+				-- 	return
+				-- end
 				local etc = getrootfs():get("/etc/")
 				local parent, child = parentchild(mountpointdir)
 				getrootfs():get(parent)[child] = part.fs
 				etc.mounts = (etc.mounts or "") .. part.uuid .. "    " .. mountpointdir .. "\n"
 				mountdevice = part
-				break
+				return
 			end
 		end
-		if mountdevice then break end
 	end
+	echo("no mountable device found\n")
 end]],
 	umount = [[
 use("log")
@@ -352,11 +352,12 @@ use("lua")
 use("log")
 use("table")
 use("instance")
-import("formatcolumns")
+use("formatcolumns")
 local StorageDevice = require(game.ReplicatedStorage.Common.storagedevice)
 local DiskDevice = require(game.ReplicatedStorage.Common.diskdevice)
 
 local function diskinfo(disk)
+	print("disk info", disk)
 	local items = {{"Device", "Size", "Type"}}
 	for _, part in ipairs(disk.parts) do
 		local devicename = "/dev/" .. part.name
@@ -382,9 +383,15 @@ local function diskinfo(disk)
 end
 
 local function doactions(disk, actions)
+	print("actions", actions)
 	for _, action in ipairs(actions) do
 		if action[1] == "newpart" then
-			disk.parts[#disk.parts + 1] = action[2]
+			local part = StorageDevice.empty()
+			part.name = disk.name .. (#disk.parts + 1)
+			part.type = action[2]
+			part.uuid = action[3]
+			part.fs = {}
+			disk.parts[#disk.parts + 1] = part
 		end
 	end
 	for _, action in ipairs(actions) do
@@ -453,6 +460,7 @@ return function(argv)
 		.. "Be careful before using the write command.\n\n\n"
 	echo(welcome)
 	local help = "\nHelp:\n\n"
+		.. " d  delete a partition\n"
 		.. " m  print this menu\n"
 		.. " n  add a new partition\n"
 		.. " p  print the partition table\n"
@@ -475,15 +483,31 @@ return function(argv)
 					echo(("Partition number (1,%s, default %s): "):format(
 						#fakedisk.parts, #fakedisk.parts
 					))
-					n = tonumber(readline())
-					if n > #fakedisk.parts or n < 1 or n % 1 ~= 0 then
+					local nraw = readline()
+					if nraw == "" then
+						n = #fakedisk.parts
+					else
+						n = tonumber(nraw)
+					end
+					if n ~= nil and (n > #fakedisk.parts or n < 1 or n % 1 ~= 0) then
 						n = nil
 						echo("[31]Value out of range.\n\n")
 					end
 				end
 			end
 			if n ~= nil then
-				actions[#actions + 1] = {"deletepart", fakedisk.parts[n].uuid}
+				local uuid = fakedisk.parts[n].uuid
+				local deletedaction = false
+				for i, action in ipairs(actions) do
+					if action[1] == "newpart" and action[3] == uuid then
+						deletedaction = true
+						table.remove(actions, i)
+						break
+					end
+				end
+				if not deletedaction then
+					actions[#actions + 1] = {"deletepart", uuid}
+				end
 				fakedisk = createfakedisk(selecteddisk)
 				doactions(fakedisk, actions)
 			end
@@ -492,26 +516,22 @@ return function(argv)
 		elseif cmd == "p" then
 			echo(diskinfo(fakedisk) .. "\n")
 		elseif cmd == "n" then
-			local part = StorageDevice.empty()
-			part.name = fakedisk.name .. (#fakedisk.parts + 1)
-			echo("Partition type: ")
+			local parttype
+			-- part.name = fakedisk.name .. (#fakedisk.parts + 1)
 			while true do
-				local parttype = readline()
-				if parttype ~= "fs" and parttype ~= "boot" then
-					echo(esc(parttype) .. ": invalid partition type\n")
+				echo("Partition type: ")
+				parttype = readline()
+				if parttype == "fs" or parttype == "boot" then
+					break
+				else
+					echo(esc(part.type) .. ": invalid partition type\n")
 				end
-				part.type = parttype
-				if part.type == "fs" then
-					part.fs = {}
-				elseif part.type == "boot" then
-					part.program = ""
-				end
-				break
 			end
 			echo(("Created a new partition %s of type '%s'.\n\n"):format(
-				#fakedisk.parts + 1, part.type
+				#fakedisk.parts + 1, parttype
 			))
-			actions[#actions + 1] = {"newpart", part}
+			local part = StorageDevice.empty()
+			actions[#actions + 1] = {"newpart", parttype, part.uuid}
 			fakedisk = createfakedisk(selecteddisk)
 			doactions(fakedisk, actions)
 		elseif cmd == "q" then
@@ -529,10 +549,4 @@ return function(argv)
 		end
 	end
 end]],
-	test = [[
-local test = import("testlib")
-use("log")
-return function(argv)
-	echo(test() .. "\n")
-end]]
 }

@@ -29,4 +29,5 @@ return function(grid)
 	end
     return table.concat(grid, "\n")
 end]],
+    terminal = require(game.ReplicatedStorage.Common.defaultos.terminal),
 }

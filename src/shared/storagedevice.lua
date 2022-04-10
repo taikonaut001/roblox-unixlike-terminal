@@ -38,8 +38,7 @@ function StorageDevice:pathto(path)
 end
 
 function StorageDevice:size(dir)
-	if self.type == "boot" then return #self.program end
-	dir = dir or self.fs or self.program
+	dir = dir or self.fs
 	local size = 0
 	for k, v in pairs(dir) do
 		size = size + #k

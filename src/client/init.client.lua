@@ -4,15 +4,18 @@ local keyboard = require(game.ReplicatedStorage.Common.keyboard)
 local DiskDevice = require(game.ReplicatedStorage.Common.diskdevice)
 local StorageDevice = require(game.ReplicatedStorage.Common.storagedevice)
 
+game.StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
+
 local disks
 do
 	local disk1 = DiskDevice.new(0)
 
 	local bootpart = StorageDevice.empty()
 	bootpart.name = disk1.name .. "1"
+	bootpart.fs = {}
 	bootpart.type = "boot"
     local bootprogram = require(game.ReplicatedStorage.Common.defaultos.boot)
-	bootpart.program = lbc:compile(bootprogram, "boot")
+	bootpart.fs.program = lbc:compile(bootprogram, "boot")
 
 	local rootpart = StorageDevice.empty()
 	rootpart.name = disk1.name .. "2"
@@ -136,6 +139,6 @@ local function bcenv()
 	return env
 end
 
-local bootprogram = bootdevice.parts[1].program
+local bootprogram = bootdevice.parts[1].fs.program
 -- local bc = lbc:compile(bootprogram)
 lbi:interpret(bootprogram, bcenv())
