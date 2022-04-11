@@ -12,34 +12,55 @@ for _, name in ipairs(remotenames) do
     remote.Parent = remotesfolder
 end
 
+-- local function getpackagelist()
+--     local list = game.HttpService:GetAsync(PKGURL)
+--     list = game.HttpService:JSONDecode(list)
+--     local packages = {}
+--     for i, fileinfo in ipairs(list.tree) do
+--         packages[i] = fileinfo.path:sub(1, -5)
+--     end
+--     return packages
+-- end
+
+-- local function getsrc(packagename)
+--     return game.HttpService:GetAsync(PKGSRCURL:format(packagename) .. "bin.lua")
+-- end
+
+-- local packagelistcache = getpackagelist()
+-- local packagelistcacheupdated = tick()
+
+-- local function getmeta(packagename)
+--     if table.find(packagelistcache, packagename) == nil then return nil end
+--     local raw = game.HttpService:GetAsync(PKGSRCURL:format(packagename) .. "meta.json")
+--     return game.HttpService:JSONDecode(raw)
+-- end
+
 local function getpackagelist()
-    local list = game.HttpService:GetAsync(PKGURL)
-    list = game.HttpService:JSONDecode(list)
-    local packages = {}
-    for i, fileinfo in ipairs(list.tree) do
-        packages[i] = fileinfo.path:sub(1, -5)
+    local folders = game.ServerStorage.Packages:GetChildren()
+    local list = table.create(#folders)
+    for i, folder in ipairs(folders) do
+        list[i] = folder.Name
     end
-    return packages
+    return list
 end
 
 local function getsrc(packagename)
-    return game.HttpService:GetAsync(PKGSRCURL:format(packagename) .. "bin.lua")
+    return game.ServerStorage.Packages[packagename]["bin.lua"].Value
 end
 
-local packagelistcache = getpackagelist()
-local packagelistcacheupdated = tick()
-
 local function getmeta(packagename)
-    if table.find(packagelistcache, packagename) == nil then return nil end
-    local raw = game.HttpService:GetAsync(PKGSRCURL:format(packagename) .. "meta.json")
+    local folder = game.ServerStorage.Packages:FindFirstChild(packagename)
+    if folder == nil then return nil end
+    local raw = folder["meta.json"].Value
     return game.HttpService:JSONDecode(raw)
 end
 
 remotesfolder.pkglist.OnServerInvoke = function(player)
-    if tick() - packagelistcacheupdated > 30 then
-        packagelistcache = getpackagelist()
-    end
-    return packagelistcache
+    -- if tick() - packagelistcacheupdated > 30 then
+    --     packagelistcache = getpackagelist()
+    -- end
+    -- return packagelistcache
+    return getpackagelist()
 end
 
 remotesfolder.pkggetmeta.OnServerInvoke = function(player, packagename)

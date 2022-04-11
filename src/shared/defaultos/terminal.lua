@@ -210,7 +210,7 @@ local function echo(text)
                 break
             end
             local code = capture:sub(2, -2)
-            color = COLORCODES[code] or color
+            color = COLORCODES[code] or error("invalid color code '" .. code .. "'")
             index = index + #capture
         else
             putchar = text:sub(index, index)
@@ -428,6 +428,12 @@ return {
     end,
     parsedir = function(self, dir)
         return parsedir(dir)
+    end,
+    getheight = function(self)
+        return DISPHEIGHT
+    end,
+    getwidth = function(self)
+        return DISPWIDTH
     end
 }
 ]]

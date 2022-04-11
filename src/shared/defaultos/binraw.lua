@@ -6,7 +6,7 @@ use("filesys")
 use("instance")
 use("table")
 use("luau")
-use("luavm")
+use("pkgmanager")
 local remotefolder = game.ReplicatedStorage.Remotes
 return function(argv)
 	if getrootfs().fs.etc.pkg == nil then
@@ -17,71 +17,97 @@ return function(argv)
 		if packagename == nil then
 			echo("pkg: Missing package name")
 			return
-		elseif getrootfs().fs.etc.pkg.installed:find(packagename, nil, true) ~= nil then
-			echo("Package '" .. esc(packagename) .. "' is already installed.\n")
+		elseif pkgmanager:isinstalled(packagename) then
+			echo("Package '" .. packagename .. "' is already installed.\n")
 			return
 		end
+		pkgmanager:choose(packagename)
 		echo("Fetching package metadata...\n")
-		local meta = remotefolder.pkggetmeta:InvokeServer(packagename)
-		if meta == nil then
-			echo("Package '" .. esc(packagename) .. "' not found.\n")
+		pkgmanager:fetchmeta()
+		if not pkgmanager:exists() then
+			echo("Package '" .. packagename .. "' not found.\n")
+			pkgmanager:done()
 			return
 		end
-		echo(("Found '%s' version %.1f\n"):format(packagename, meta.version))
+		echo(("Found '%s' version %.1f\n"):format(
+			pkgmanager:name(),
+			pkgmanager:version()
+		))
 		-- TODO check dependencies
 		echo("Begin installation? \\[Y/n] ")
 		local answer = readline()
 		if answer:lower() ~= "y" and answer ~= "" then
 			echo("Abort.\n")
+			pkgmanager:done()
 			return
 		end
 		echo("Fetching package source...\n")
-		local src = remotefolder.pkgget:InvokeServer(packagename)
-		echo("Received " .. formatbytesize(#src) .. "\nBuilding package...\n")
-		local bc = lbc:compile(src, packagename)
-		getrootfs().fs.bin[packagename] = bc
-		local pkgdir = getrootfs().fs.etc.pkg
-		pkgdir.installed = pkgdir.installed .. ("%s %.1f\n"):format(packagename, meta.version)
-		echo("Installed " .. esc(packagename) .. "\n")
+		pkgmanager:fetchsrc()
+		echo("Received " .. formatbytesize(#pkgmanager:src()) .. "\nInstalling package...\n")
+		pkgmanager:install()
+		echo("Installed " .. packagename .. "\n")
+		pkgmanager:done()
 	elseif argv[2] == "uninstall" then
 		local pkgdir = getrootfs().fs.etc.pkg
 		local packagename = argv[3]
 		if packagename == nil then
 			echo("pkg: Missing package name")
 			return
-		elseif pkgdir.installed:find(packagename, nil, true) == nil then
-			echo("Package '" .. esc(packagename) .. "' is not installed.\n")
+		elseif not pkgmanager:isinstalled(packagename) then
+			echo("Package '" .. packagename .. "' is not installed.\n")
 			return
 		end
-		local size = formatbytesize(#getrootfs().fs.bin[packagename])
+		pkgmanager:choose(packagename)
+		local size = formatbytesize(#pkgmanager:bin())
 		echo(size .. " will be freed.\nUninstall package? \\[Y/n] ")
 		local answer = readline()
 		if answer:lower() ~= "y" and answer ~= "" then
 			echo("Abort.\n")
+			pkgmanager:done()
 			return
 		end
-		getrootfs().fs.bin[packagename] = nil
-		local found = false
-		local lines = pkgdir.installed:split("\n")
-		for i, line in ipairs(lines) do
-			if line:find(packagename, nil, true) then
-				table.remove(lines, i)
-				found = true
-				break
-			end
-		end
-		pkgdir.installed = table.concat(lines, "\n")
-		if found == false then
-			print("couldn't find package")
-		end
-		echo("Uninstalled " .. esc(packagename) .. "\n")
-		-- getrootfs()
+		pkgmanager:uninstall()
+		pkgmanager:done()
+		echo("Uninstalled " .. packagename .. "\n")
 	elseif argv[2] == "update" then
-
+		local packagename = argv[3]
+		if packagename == nil then
+			echo("pkg: Missing package name")
+			return
+		elseif not pkgmanager:isinstalled(packagename) then
+			echo("Package '" .. packagename .. "' is not installed.\n")
+			return
+		end
+		pkgmanager:choose(packagename)
+		local currentversion = pkgmanager:currentversion()
+		echo(("Current version is %.1f\nFetching package metadata...\n"):format(currentversion))
+		pkgmanager:fetchmeta()
+		local latestversion = pkgmanager:version()
+		if latestversion == currentversion then
+			echo("Already up to date\n")
+			pkgmanager:done()
+			return
+		elseif latestversion < currentversion then
+			error()
+		end
+		echo(("Found version %.1f\nUpdate to new version? \\[Y/n]"):format(latestversion))
+		local answer = readline()
+		if answer:lower() ~= "y" and answer ~= "" then
+			echo("Abort.\n")
+			pkgmanager:done()
+			return
+		end
+		echo("Fetching source...\n")
+		pkgmanager:fetchsrc()
+		echo("Installing new version...\n")
+		pkgmanager:update()
+		echo("Updated " .. pkgmanager:name() .. "\n")
+		pkgmanager:done()
 	elseif argv[2] == "list-installed" then
-		echo(esc(getrootfs().fs.etc.pkg.installed) .. "\n")
+		local list = pkgmanager:installedpackages()
+		echo(esc(table.concat(list, "\n")) .. "\n")
 	elseif argv[2] == "list" then
-		local list = remotefolder.pkglist:InvokeServer()
+		local list = pkgmanager:allpackages()
 		echo(esc(table.concat(list, "\n")) .. "\n")
 	else
 		local msg = "pkg\n"
@@ -90,7 +116,7 @@ return function(argv)
 			.. "  install [package] - install package\n"
 			.. "  update - update old packages\n"
 			.. "  uninstall [package] - uninstall package\n"
-		echo(msg .. "\n")
+		echo(esc(msg) .. "\n")
 	end
 end]],
 	lsblk = [[
@@ -188,6 +214,8 @@ end]],
 use("lua")
 use("log")
 use("filesys")
+use("math")
+use("formatcolumns")
 return function(argv)
 	local dir = parsedir(argv[2] or getdirectory())
 	local file = getrootfs():pathto(dir)
@@ -196,15 +224,28 @@ return function(argv)
 	elseif type(file) == "string" then
 		echo(esc(dir) .. "\n")
 	else
-		local output = ""
+		local files = {}
+		local longest = -1
 		for name, childfile in pairs(file) do
 			if type(childfile) == "table" then
-				output = output .. "[36]" .. esc(name) .. "\n"
+				files[#files + 1] = "[36]" .. name .. "[0]"
 			else
-				output = output .. "[0]" .. esc(name) .. "\n"
+				files[#files + 1] = name
+			end
+			longest = math.max(longest, #name)
+		end
+		local namesperrow = math.floor(getdispwidth() / (longest + 1))
+		local rowcount = math.ceil(#files / namesperrow)
+		local rows = {}
+		for row = 1, rowcount do
+			rows[row] = {}
+			for i = 1, namesperrow do
+				local index = (row - 1) * namesperrow + i
+				rows[row][i] = files[index] or ""
 			end
 		end
-		echo(output)
+		local grid = formatcolumns(rows)
+		echo(grid .. "\n")
 	end
 end]],
 	cat = [[
@@ -224,7 +265,7 @@ return function(argv)
 	if not file then
 		echo("cat: " .. esc(argv[2]) .. ": No such file or directory\n")
 	elseif type(file) == "table" then
-		echo(echo "cat: " .. esc(argv[2]) .. " is a directory\n")
+		echo("cat: " .. esc(argv[2]) .. " is a directory\n")
 	else
 		echo(esc(file) .. "\n")
 	end

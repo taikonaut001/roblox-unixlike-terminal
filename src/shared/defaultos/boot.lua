@@ -162,6 +162,12 @@ do
 end
 
 osnamespaces.log = {
+	getdispwidth = function()
+		return terminal:getwidth()
+	end,
+	getdispheight = function()
+		return terminal:getheight()
+	end,
     echo = function(text)
         terminal:echo(text)
     end,
@@ -222,6 +228,8 @@ local function collectoutput(argv)
 			end,
 			esc = function(s)return s end,
 			clear = function()end,
+			getdispwidth = osnamespaces.getdispwidth,
+			getdispheight = osnamespaces.getdispheight,
 			-- no support for readline yet.
 		}
 	}
