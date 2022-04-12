@@ -1,5 +1,5 @@
 ## Todo
-- Add boot selector for multiple operating systems
+- Datastores: save, reset and add new disks
 - Less spaghetti
 
 ## Rojo
