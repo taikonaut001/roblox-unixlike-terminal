@@ -548,7 +548,7 @@ local function on_lua_error(failed, err)
 	error(string.format('%s:%i: %s', src, line, err), 0)
 end
 
-local function run_lua_func(state, env, upvals)
+local function run_lua_func(state, env, upvals, condition)
 	local code = state.code
 	local subs = state.subs
 	local vararg = state.vararg
@@ -558,7 +558,7 @@ local function run_lua_func(state, env, upvals)
 	local memory = state.memory
 	local pc = state.pc
 	
-	while true do
+	while condition() do
 		local inst = code[pc]
 		local op = inst.op
 		pc = pc + 1
@@ -937,7 +937,7 @@ local function run_lua_func(state, env, upvals)
 								pc = pc + nups
 							end
 
-							memory[inst.A] = lua_wrap_state(sub, env, uvlist)
+							memory[inst.A] = lua_wrap_state(sub, env, uvlist, condition)
 						else
 							--[[TESTSET]]
 							local A = inst.A
@@ -1033,7 +1033,7 @@ local function run_lua_func(state, env, upvals)
 	end
 end
 
-function lua_wrap_state(proto, env, upval)
+function lua_wrap_state(proto, env, upval, condition)
 	local function wrapped(...)
 		local passed = table.pack(...)
 		local memory = table.create(proto.max_stack)
@@ -1051,7 +1051,7 @@ function lua_wrap_state(proto, env, upval)
 
 		local state = {vararg = vararg, memory = memory, code = proto.code, subs = proto.subs, pc = 1}
 
-		local result = table.pack(pcall(run_lua_func, state, env, upval))
+		local result = table.pack(pcall(run_lua_func, state, env, upval, condition))
 
 		if result[1] then
 			return table.unpack(result, 2, result.n)
@@ -1070,9 +1070,10 @@ end
 --return {bc_to_state = lua_bc_to_state, wrap_state = lua_wrap_state}
 
 return {
-	interpret = function(self, bytecode, environment)
+	interpret = function(self, bytecode, environment, condition)
+		condition = condition or function() return true end
 		local state = lua_bc_to_state(bytecode)
-		local wrapper = lua_wrap_state(state, environment)
+		local wrapper = lua_wrap_state(state, environment, nil, condition)
 		return wrapper()
 	end,
 }

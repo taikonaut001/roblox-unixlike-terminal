@@ -11,8 +11,15 @@ use("debug")
 use("luavm")
 use("disks")
 use("namespaces")
+use("reboot")
 
 local rootfs = bootdevice.parts[2] -- TODO
+for _, disk in ipairs(disks) do
+	rootfs.fs.dev[disk.name] = disk.uuid
+	for _, part in ipairs(disk.parts) do
+		rootfs.fs.dev[part.name] = part.uuid
+	end
+end
 
 local function bcenv(usenamespaces)
 	local env = {
@@ -203,19 +210,21 @@ local function execute(argv, envoverride)
 			end
 		end
 	end
+	local env = envoverride or bcenv(osnamespaces)
+	local success = true
 	local success, result = pcall(function()
-		return lbi:interpret(bc, envoverride or bcenv(osnamespaces))
+		return lbi:interpret(bc, env)
 	end)
 	if not success then
-		terminal:echo(bcdir .. ": error while executing lua bytecode\n[31]" .. result .. "\n")
+		terminal:echo(bcdir .. ": error while executing lua bytecode\n[31]" .. terminal:esc(result) .. "\n")
 		return
 	end
 	local cmdfunc = result
-	assert(type(cmdfunc) == "function")
+	if type(cmdfunc) ~= "function" then return end
 	local argvcopy = table.move(argv, 1, #argv, 1, {})
 	success, result = pcall(cmdfunc, argvcopy)
 	if not success then
-		terminal:echo("lua error while executing command\n" .. "[31]" .. terminal:esc(result) .. "\n")
+		terminal:echo(bcdir .. ": error while executing lua bytecode\n[31]" .. terminal:esc(result) .. "\n")
 	end
 end
 

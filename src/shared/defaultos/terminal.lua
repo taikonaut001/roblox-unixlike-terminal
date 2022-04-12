@@ -91,7 +91,6 @@ local cmdhistory = {}
 
 local function scroll(amount)
     assert(amount >= 1)
-    local t = tick()
     for y = 1, DISPHEIGHT do
         for x = 1, DISPWIDTH do
             local newchar, newcolor
@@ -116,7 +115,6 @@ local function scroll(amount)
             -- setcellcolor(tocell, newcolor)
         end
     end
-    print(tick() - t)
 end
 
 local function clear()

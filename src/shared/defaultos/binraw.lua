@@ -1,4 +1,7 @@
 return{
+	reboot = [[
+use("reboot")
+return reboot]],
 	pkg = [[
 use("log")
 use("lua")
@@ -478,6 +481,62 @@ return function(argv)
 		getrootfs():get("/etc/").mounts = mounts:sub(1, i - 1) .. mounts:sub(j + 1)
 	else
 		echo("umount: No device currently mounted to " .. umountdir)
+	end
+end]],
+	cp = [[
+use("filesys")
+use("table")
+use("lua")
+use("log")
+
+-- pls no circular references 🥺
+local function deepcopy(t)
+	local copy = {}
+	for k, v in pairs(t) do
+		if type(v) == "table" then
+			copy[k] = deepcopy(v)
+		else
+			copy[k] = v
+		end
+	end
+	return copy
+end
+return function(argv)
+	local option_r = table.find(argv, "-r")
+	if option_r then
+		table.remove(argv, option_r)
+	end
+	if argv[2] == nil then
+		echo("cp: missing first argument.\n")
+		return
+	elseif argv[3] == nil then
+		echo("cp missing second argument.\n")
+		return
+	end
+	local indir = parsedir(argv[2])
+	local infile = getrootfs():pathto(indir)
+	if type(infile) == "table" then
+		if not option_r then
+			echo("cp: " .. esc(argv[2]) .. " is a directory\n")
+			return
+		end
+	elseif not infile then
+		echo("cp: '" .. esc(argv[2]) .. "': No such file or directory\n")
+		return
+	end
+	local outdir = parsedir(argv[3])
+	local outfile = getrootfs():pathto(outdir)
+	if outfile == false then
+		echo("cp: '" .. esc(argv[3]) .. "': No such file or directory\n")
+		return
+	end
+	if outfile == nil or type(outfile) == "string" or option_r then
+		local parent, child = parentchild(outdir)
+		getrootfs():get(parent)[child] = type(infile) == "table" and deepcopy(infile) or infile
+	elseif type(outfile) == "table" then
+		echo("cp: " .. esc(outdir) .. " is a directory\n")
+	else
+		echo("lbc: unexpected error occured while parsing command\n")
 	end
 end]],
 }

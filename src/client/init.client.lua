@@ -1,10 +1,13 @@
 local lbc = require(game.ReplicatedStorage.Common.lbc)
-local lbi = require(game.ReplicatedStorage.Common.lbi) -- TODO
+local lbi = require(game.ReplicatedStorage.Common.lbi)
 local keyboard = require(game.ReplicatedStorage.Common.keyboard)
 local DiskDevice = require(game.ReplicatedStorage.Common.diskdevice)
 local StorageDevice = require(game.ReplicatedStorage.Common.storagedevice)
 
-game.StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
+local PlayerGui = game.Players.LocalPlayer.PlayerGui
+
+task.wait(1)
+local defaultgui = PlayerGui:GetChildren()
 
 local disks
 do
@@ -48,26 +51,7 @@ do
 	local disk2 = DiskDevice.new(1)
 	disks = {disk1, disk2}
 end
-
-local bootoptions = {}
-for _, disk in ipairs(disks) do
-	local part = disk.parts[1]
-	if part.type == "boot" then
-		bootoptions[#bootoptions + 1] = disk
-		break
-	end
-end
-local bootdevice = bootoptions[1]
-assert(bootdevice ~= nil, "no bootable device found")
-
-local rootfs = bootdevice.parts[2]
-for _, disk in ipairs(disks) do
-	rootfs.fs.dev[disk.name] = disk.uuid
-	for _, part in ipairs(disk.parts) do
-		rootfs.fs.dev[part.name] = part.uuid
-	end
-end
-
+	
 local namespaces = {
 	math = {math = math},
 	string = {string = string},
@@ -81,7 +65,6 @@ local namespaces = {
 	},
 	disks = {
 		disks = disks,
-		bootdevice = bootdevice,
 	},
 	lua = {
 		pairs = pairs,
@@ -125,20 +108,109 @@ local namespaces = {
 }
 namespaces.namespaces = {namespaces = namespaces} -- this might be an issue
 
-local function bcenv()
-	local env = {}
+game.StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
+
+local function boot()
+	local bootmenu = Instance.new("ScreenGui")
+	bootmenu.Name = "BootMenu"
+	bootmenu.Parent = PlayerGui
 	
-	env.use = function(name)
-		local namespace = namespaces[name] or error("namespace does not exist: " .. name)
-		for k, v in pairs(namespace) do
-			assert(env[k] == nil)
-			env[k] = v
+	local background = Instance.new("Frame")
+	background.Size = UDim2.new(100, 0, 100, 0)
+	background.Position = UDim2.new(0.5, 0, 0.5, 0)
+	background.AnchorPoint = Vector2.new(0.5, 0.5)
+	background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	background.ZIndex = -10
+	background.Parent = bootmenu
+	
+	local bootoptions = {}
+	for _, disk in ipairs(disks) do
+		if disk.parts[1] and disk.parts[1].type == "boot" then
+			bootoptions[#bootoptions + 1] = disk
 		end
 	end
+	if #bootoptions == 0 then
+		local message = Instance.new("TextLabel")
+		message.Size = UDim2.new(0, 200, 0, 25)
+		message.TextSize = 16
+		message.Text = "No bootable medium found"
+		message.TextColor3 = Color3.fromRGB(255, 255, 255)
+		message.Position = UDim2.new(0, 10, 0, 10)
+		message.BackgroundTransparency = 1
+		message.Parent = bootmenu
+		return
+	end
 	
-	return env
+	local buttonheight = 25
+	local bootdevice
+	for i, option in ipairs(bootoptions) do
+		local button = Instance.new("TextButton")
+		button.Size = UDim2.new(0, 200, 0, buttonheight)
+		button.Position = UDim2.new(0, 10, 0, 10 + buttonheight * (i - 1))
+		button.Text = option.name
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.BackgroundTransparency = 1
+		button.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		button.BorderSizePixel = 0
+		button.Parent = bootmenu
+	
+		button.MouseEnter:Connect(function()
+			button.BackgroundTransparency = 0
+		end)
+		button.MouseLeave:Connect(function()
+			button.BackgroundTransparency = 1
+		end)
+		button.Activated:Connect(function()
+			bootdevice = option
+		end)
+	end
+	while bootdevice == nil do
+		task.wait()
+	end
+	bootmenu:Destroy()
+
+	local function bcenv()
+		local env = {}
+		env.use = function(name)
+			local namespace = namespaces[name] or error("namespace does not exist: " .. name)
+			for k, v in pairs(namespace) do
+				assert(env[k] == nil)
+				env[k] = v
+			end
+		end
+		return env
+	end
+
+	local running = true
+
+	local function endprocess()
+		running = false
+		for _, v in ipairs(PlayerGui:GetChildren()) do
+			if not table.find(defaultgui, v) then
+				v:Destroy()
+			end
+		end
+		boot()
+	end
+
+	namespaces.disks.bootdevice = bootdevice
+	namespaces.reboot = {}
+	namespaces.reboot.reboot = function()
+		endprocess()
+	end
+
+	local bootprogram = bootdevice.parts[1].fs.program
+	local success, result = pcall(function()
+		lbi:interpret(bootprogram, bcenv(), function() return running end)
+	end)
+	if not success then
+		coroutine.wrap(function()
+			error(result)
+		end)()
+		endprocess()
+	else
+		endprocess()
+	end
 end
 
-local bootprogram = bootdevice.parts[1].fs.program
--- local bc = lbc:compile(bootprogram)
-lbi:interpret(bootprogram, bcenv())
+boot()
