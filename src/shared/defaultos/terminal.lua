@@ -18,6 +18,8 @@ local DISPWIDTH = 128 -- TODO size based on screen
 local DISPHEIGHT = 48
 local DEFAULTFONTCOLOR = Color3.fromRGB(168, 168, 168)
 
+local cellcharcache = {}
+
 local function createcell()
     local cell = Instance.new("ImageLabel")
     cell.BackgroundTransparency = 1
@@ -26,26 +28,28 @@ local function createcell()
     cell.ImageRectSize = Vector2.new(CELLWIDTH, CELHEIGHT)
     cell.Size = UDim2.new(0, CELLWIDTH, 0, CELHEIGHT)
     cell.ImageColor3 = DEFAULTFONTCOLOR
+    cellcharcache[cell] = SPACEBYTE
     return cell
 end
 
-local function setcellchar(cell, charbyte)
-    local x = charbyte % 32
-    local y = math.floor(charbyte / 32)
-    cell.ImageRectOffset = Vector2.new(x * CELLWIDTH + 8, y * CELHEIGHT + 8)
-    cell:SetAttribute("charbyte", charbyte)
-end
-
-local function setcellcolor(cell, color)
-    cell.ImageColor3 = color
-end
-
 local function getcellchar(cell)
-    return cell:GetAttribute("charbyte") or SPACEBYTE
+    return cellcharcache[cell] or error()
 end
 
 local function getcellcolor(cell)
     return cell.ImageColor3
+end
+
+local function setcellchar(cell, charbyte)
+    -- if getcellchar(cell) == charbyte then return end
+    local x = charbyte % 32
+    local y = math.floor(charbyte / 32)
+    cell.ImageRectOffset = Vector2.new(x * CELLWIDTH + 8, y * CELHEIGHT + 8)
+    cellcharcache[cell] = charbyte
+end
+
+local function setcellcolor(cell, color)
+    cell.ImageColor3 = color
 end
 
 local displayfolder
@@ -87,6 +91,7 @@ local cmdhistory = {}
 
 local function scroll(amount)
     assert(amount >= 1)
+    local t = tick()
     for y = 1, DISPHEIGHT do
         for x = 1, DISPWIDTH do
             local newchar, newcolor
@@ -94,20 +99,34 @@ local function scroll(amount)
                 newchar = SPACEBYTE
                 newcolor = DEFAULTFONTCOLOR
             else
-                newchar = getcellchar(display[y + amount][x])
-                newcolor = getcellcolor(display[y + amount][x])
+                local fromcell = display[y + amount][x]
+                newchar = cellcharcache[fromcell]
+                newcolor = fromcell.ImageColor3
+                -- newchar = getcellchar(fromcell)
+                -- newcolor = getcellcolor(fromcell)
             end
-            setcellchar(display[y][x], newchar)
-            setcellcolor(display[y][x], newcolor)
+            local tocell = display[y][x]
+            -- setcellchar(tocell, newchar)
+
+            local x = newchar % 32
+            local y = math.floor(newchar / 32)
+            tocell.ImageRectOffset = Vector2.new(x * CELLWIDTH + 8, y * CELHEIGHT + 8)
+            cellcharcache[tocell] = newchar
+            tocell.ImageColor3 = newcolor
+            -- setcellcolor(tocell, newcolor)
         end
     end
+    print(tick() - t)
 end
 
 local function clear()
     for y = 1, #display do
         for x = 1, #display[y] do
-            setcellchar(display[y][x], SPACEBYTE)
-            setcellcolor(display[y][x], DEFAULTFONTCOLOR)
+            local cell = display[y][x]
+            cell.ImageRectOffset = Vector2.new(0, 0)
+            cell.BackgroundColor3 = DEFAULTFONTCOLOR
+            -- setcellchar(display[y][x], SPACEBYTE)
+            -- setcellcolor(display[y][x], DEFAULTFONTCOLOR)
         end
     end
     cursory = 1
